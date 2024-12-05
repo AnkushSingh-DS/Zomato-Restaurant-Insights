@@ -1,0 +1,238 @@
+-- Creating Table
+CREATE TABLE RESTAURANTS (
+    RES_ID BIGINT,
+    NAME VARCHAR(255),
+    ESTABLISHMENT VARCHAR(100),
+    CITY VARCHAR(100),
+    CITY_ID INTEGER,
+    LOCALITY VARCHAR(100),
+    ZIPCODE INTEGER,
+    LOCALITY_VERBOSE VARCHAR(255),
+    CUISINES TEXT,
+    TIMINGS TEXT,
+    AVERAGE_COST_FOR_TWO INTEGER,
+    PRICE_RANGE INTEGER,
+    HIGHLIGHTS TEXT,
+    AGGREGATE_RATING DECIMAL(3, 1),
+    RATING_TEXT VARCHAR(50),
+    VOTES INTEGER,
+    PHOTO_COUNT INTEGER,
+    DELIVERY INTEGER,
+    TAKEAWAY INTEGER
+);
+
+
+
+-- Inserting Data
+COPY RESTAURANTS (
+    RES_ID,
+    NAME,
+    ESTABLISHMENT,
+    CITY,
+    CITY_ID,
+    LOCALITY,
+    ZIPCODE,
+    LOCALITY_VERBOSE,
+    CUISINES,
+    TIMINGS,
+    AVERAGE_COST_FOR_TWO,
+    PRICE_RANGE,
+    HIGHLIGHTS,
+    AGGREGATE_RATING,
+    RATING_TEXT,
+    VOTES,
+    PHOTO_COUNT,
+    DELIVERY,
+    TAKEAWAY
+)
+FROM
+    'D:\Zomato Analysis\Zomato Cleaned Data.csv' DELIMITER ',' CSV HEADER;
+
+
+
+-- Select Everything
+SELECT 
+    *
+FROM
+    RESTAURANTS;
+
+
+
+-- Average Ratings by City (Safest Cities to Invest In)
+SELECT 
+    CITY,
+    COUNT(*) AS TOTAL_RESTAURANTS,
+    ROUND(AVG(AGGREGATE_RATING), 1) AS AVG_RATING
+FROM
+    RESTAURANTS
+GROUP BY CITY
+ORDER BY AVG_RATING DESC
+LIMIT 10;
+
+
+
+-- Top Fast Food Joints to Invest In: Best Balance of High Ratings and Number of Outlets
+SELECT 
+    NAME,
+    CUISINES,
+    COUNT(*) AS NUM_OF_OUTLET,
+    ROUND(AVG(AGGREGATE_RATING), 1) AS AVG_RATING
+FROM
+    RESTAURANTS
+GROUP BY CUISINES , NAME
+HAVING COUNT(*) >= 50
+ORDER BY 4 DESC , 3 DESC , 1 ASC
+LIMIT 5;
+
+
+
+-- Top Restaurants to Invest In: Highest Ratings Excluding Large Chains
+SELECT 
+    NAME,
+    CUISINES,
+    COUNT(*) AS NAME_COUNT,
+    ROUND(AVG(AGGREGATE_RATING), 1) AS AVG_RATING
+FROM
+    RESTAURANTS
+GROUP BY NAME , CUISINES
+HAVING COUNT(NAME) BETWEEN 5 AND 6
+ORDER BY 4 DESC , 3 DESC , 1 ASC
+LIMIT 5;
+
+
+
+-- Average Votes and Photos by Rating (Higher Ratings Associated with More Votes and Photos)
+(SELECT 
+    AGGREGATE_RATING,
+    ROUND(AVG(VOTES), 0) AS AVG_VOTES,
+    ROUND(AVG(PHOTO_COUNT), 0) AS AVG_PHOTO_COUNT
+FROM
+    RESTAURANTS
+GROUP BY AGGREGATE_RATING
+ORDER BY AGGREGATE_RATING DESC
+LIMIT 5) UNION ALL (SELECT 
+    AGGREGATE_RATING,
+    ROUND(AVG(VOTES), 0) AS AVG_VOTES,
+    ROUND(AVG(PHOTO_COUNT), 0) AS AVG_PHOTO_COUNT
+FROM
+    RESTAURANTS
+GROUP BY AGGREGATE_RATING
+HAVING AGGREGATE_RATING <= 2.5
+ORDER BY AGGREGATE_RATING DESC
+LIMIT 5);
+
+
+
+-- Average Votes and Photos by Restaurant Name with Rating <= 2.5 (Opportunity for Improvement)
+SELECT 
+    NAME,
+    ROUND(AVG(VOTES), 0) AS AVG_VOTES,
+    ROUND(AVG(PHOTO_COUNT), 0) AS AVG_PHOTO_COUNT,
+    ROUND(AVG(AGGREGATE_RATING), 1) AS AVG_RATING
+FROM
+    RESTAURANTS
+GROUP BY NAME , CUISINES
+HAVING AVG(AGGREGATE_RATING) <= 2.5
+ORDER BY AVG_RATING DESC;
+
+
+
+-- Average Rating by Cost (Best Cost for Two People is Around 800 for a Balance of Rating and Restaurant Count)
+SELECT 
+    AVERAGE_COST_FOR_TWO,
+    COUNT(*) AS TOTAL_RESTAURANTS,
+    ROUND(AVG(AGGREGATE_RATING), 1) AS AVG_RATING
+FROM
+    RESTAURANTS
+GROUP BY AVERAGE_COST_FOR_TWO
+HAVING COUNT(*) >= 1000
+ORDER BY AVG_RATING DESC , TOTAL_RESTAURANTS DESC
+LIMIT 5;
+
+
+
+-- Average Cost for Two People Compared to 800 (Determine Adjustments Needed)
+SELECT 
+    CITY,
+    ROUND(AVG(AVERAGE_COST_FOR_TWO), 0) AS AVG_COST_FOR_TWO,
+    800 AS TARGET_AMOUNT,
+    (CASE
+        WHEN
+            ROUND(AVG(AVERAGE_COST_FOR_TWO), 0) < 800
+        THEN
+            CONCAT('Increase by ',
+                    800 - ROUND(AVG(AVERAGE_COST_FOR_TWO), 0))
+        WHEN
+            ROUND(AVG(AVERAGE_COST_FOR_TWO), 0) > 800
+        THEN
+            CONCAT('Decrease by ',
+                    ROUND(AVG(AVERAGE_COST_FOR_TWO), 0) - 800)
+        ELSE 'Keep the same.'
+    END) AS ADJUSTMENT_RECOMMENDATION
+FROM
+    RESTAURANTS
+GROUP BY CITY
+ORDER BY CITY;
+
+
+
+-- Popular Cuisines to Invest In for Each City (Top Ranked Cuisine per City)
+WITH CUISINES_RANKED AS (
+    SELECT
+        CITY,
+        CUISINES,
+        COUNT(*) AS CUISINE_COUNT,
+        ROW_NUMBER() OVER (
+            PARTITION BY CITY
+            ORDER BY COUNT(*) DESC
+        ) AS RANK
+    FROM
+        RESTAURANTS
+    GROUP BY
+        CITY,
+        CUISINES
+)
+SELECT
+    CITY,
+    CUISINES,
+    CUISINE_COUNT
+FROM
+    CUISINES_RANKED
+WHERE
+    RANK = 1
+ORDER BY
+    3 desc;
+
+
+
+-- Cities with High Delivery Counts (Top Cities with Most Delivery Options)
+SELECT 
+    CITY, SUM(DELIVERY) AS TOTAL_DELIVERY
+FROM
+    RESTAURANTS
+GROUP BY CITY
+ORDER BY TOTAL_DELIVERY DESC
+LIMIT 5;
+
+
+
+-- Opportunity to Open Multiple Famous Fast Food Joints Where Specific Fast Food Joint is Performing Well but Has Only One Outlet
+SELECT 
+    CITY,
+    NAME,
+    ROUND(AVG(AGGREGATE_RATING), 1) AS AVG_RATING,
+    COUNT(*) AS NUM_OUTLET
+FROM
+    RESTAURANTS
+WHERE
+    NAME IN ('Dominos Pizza' , 'McDonalds',
+        'Subway',
+        'Burger King',
+        'Pizza Hut')
+GROUP BY CITY , NAME
+HAVING ROUND(AVG(AGGREGATE_RATING), 1) BETWEEN 4 AND 5
+    AND COUNT(*) = 1
+ORDER BY CITY ASC , AVG_RATING DESC;
+
+
+
